@@ -42,7 +42,7 @@ trainingData = df.join(training_patients, ['patient'], 'inner')
 testData = df.join(training_patients, ['patient'], 'leftanti')
 
 # Train a RandomForest model.
-rf = RandomForestClassifier(labelCol="label", featuresCol="features", numTrees=50, maxDepth=3)
+rf = RandomForestClassifier(labelCol="label", featuresCol="features", numTrees=10, maxDepth=5)
 
 # Make pipeline from the stages
 pipeline = Pipeline(stages=[labelIndexer, features, rf])
@@ -56,7 +56,7 @@ predictions = model.transform(testData)
 
 # Get Metrics
 
-def get_metrics(predicitons):
+def get_metrics(predictions):
     auc = BinaryClassificationEvaluator().evaluate(predictions)
 
     truncated = predictions.select(['prediction', 'probability', 'label'])
@@ -88,3 +88,12 @@ final.show()
 1
 
 # Below considers all samples to be independent, which is absolutely not true
+(trainingData, testData) = df.randomSplit([0.8, 0.2])
+false_model = pipeline.fit(trainingData)
+false_predictions = false_model.transform(testData)
+
+truncated, precision, recall, auc = get_metrics(false_predictions)
+false_results = pd.DataFrame({'metric': ['Precision', 'Recall', 'AUC'],
+                        'value': [precision, recall, auc]})
+print false_results
+1
