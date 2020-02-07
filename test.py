@@ -47,9 +47,13 @@ m_metrics = MulticlassMetrics(truncated.rdd)
 results = pd.DataFrame({'metric': ['Precision', 'Recall', 'AUC'],
                         'value': [m_metrics.weightedPrecision, m_metrics.weightedRecall, metrics.areaUnderROC]})
 print results
-spark.createDataFrame(results).write.parquet('ml_test', compression=None, mode='overwrite')
+results = spark.createDataFrame(results)
+results = results.withColumn('value', results['value'].cast('float'))
+results.write.parquet('ml_test', compression=None, mode='overwrite')
 
-spark.read.parquet('ml_test').show()
+final = spark.read.parquet('ml_test')
+final.printSchema()
+final.show()
 1
 #
 # def evaluate_results(predictions):
