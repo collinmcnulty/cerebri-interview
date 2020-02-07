@@ -6,29 +6,31 @@ from pyspark.ml import Pipeline
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
 import pandas as pd
+import fastparquet
+import random
+
+random.seed(1)
+
 data_path = __file__ + '/../data/parkinsons.data'
 pand = pd.read_csv(data_path)
 a = pand['name'].str.split('_', expand=True)[2].unique()
 
-
-
 spark = SparkSession.builder.appName('ml-bank').getOrCreate()
 df = spark.read.csv(data_path,
-                        header=True, inferSchema=True)
+                    header=True, inferSchema=True)
 
 split_col = pyspark.sql.functions.split(df['name'], '_')
 df = df.withColumn('patient', split_col.getItem(2))
 labelIndexer = StringIndexer(inputCol="status", outputCol="label").fit(df)
-cols=['MDVP:Fhi(Hz)','MDVP:Flo(Hz)','MDVP:Jitter(%)']
+cols = 'MDVP:Fo(Hz),MDVP:Fhi(Hz),MDVP:Flo(Hz),MDVP:Jitter(%),MDVP:Jitter(Abs),MDVP:RAP,MDVP:PPQ,Jitter:DDP,MDVP:Shimmer,MDVP:Shimmer(dB),Shimmer:APQ3,Shimmer:APQ5,MDVP:APQ,Shimmer:DDA,NHR,HNR,RPDE,DFA,spread1,spread2,D2,PPE'
+cols = cols.split(',')
 assembler_features = VectorAssembler(inputCols=cols, outputCol='features')
-
 
 # Split the data into training and test sets (20% held out for testing)
 (trainingData, testData) = df.randomSplit([0.8, 0.2])
 
 # Train a RandomForest model.
-rf = RandomForestClassifier(labelCol="status", featuresCol="features", numTrees=10)
-
+rf = RandomForestClassifier(labelCol="label", featuresCol="features", numTrees=10)
 
 # Chain indexers and forest in a Pipeline
 pipeline = Pipeline(stages=[labelIndexer, assembler_features, rf])
@@ -36,15 +38,18 @@ pipeline = Pipeline(stages=[labelIndexer, assembler_features, rf])
 # Train model.  This also runs the indexers.
 model = pipeline.fit(trainingData)
 
-
-predictions = model.transform(df)
-predictions.printSchema()
-# predictions = predictions.withColumnRenamed('status', 'label')
+predictions = model.transform(testData)
 
 truncated = predictions.select(['prediction', 'label'])
-truncated.show()
 metrics = BinaryClassificationMetrics(truncated.rdd)
 m_metrics = MulticlassMetrics(truncated.rdd)
+
+results = pd.DataFrame({'metric': ['Precision', 'Recall', 'AUC'],
+                        'value': [m_metrics.weightedPrecision, m_metrics.weightedRecall, metrics.areaUnderROC]})
+print results
+spark.createDataFrame(results).write.parquet('ml_test', compression=None, mode='overwrite')
+
+spark.read.parquet('ml_test').show()
 1
 #
 # def evaluate_results(predictions):
